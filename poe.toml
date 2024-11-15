@@ -1,0 +1,10 @@
+[tool.poe.tasks.format]
+sequence = [
+    {cmd = "poetry run ruff format ."},
+    {cmd = "poetry run ruff check --fix"}
+]
+
+[tool.poe.tasks.run]
+sequence = [
+    {cmd = "poetry run uvicorn downtube.main:app --reload"}
+]

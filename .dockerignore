@@ -1,0 +1,18 @@
+# .dockerignore
+
+# Exclude git history and metadata
+.git
+.gitignore
+
+# Exclude Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Exclude virtual environments
+.venv/
+env/
+venv/
+
+# Exclude other unnecessary files
+*.log

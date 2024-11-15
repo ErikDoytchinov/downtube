@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "downtube"
+version = "0.1.0"
+description = ""
+authors = ["ErikDoytchinov <erik.doytchinov@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115.5"
+uvicorn = "^0.32.0"
+python-multipart = "^0.0.17"
+pydantic = "^2.9.2"
+jinja2 = "^3.1.4"
+aiofiles = "^24.1.0"
+yt-dlp = "^2024.11.4"
+colorlog = "^6.9.0"
+ruff = "^0.7.4"
+
+
+[tool.poetry.group.dev.dependencies]
+poethepoet = "^0.27.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poe]
+include = "poe.toml"
