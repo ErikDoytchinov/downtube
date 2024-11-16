@@ -69,7 +69,7 @@ async def download_video_file(download_id: str):
     )
 
     # Optionally delete the file after serving
-    os.remove(video_path)
+    # os.remove(video_path)
     return response
 
 

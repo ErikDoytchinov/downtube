@@ -6,5 +6,5 @@ sequence = [
 
 [tool.poe.tasks.run]
 sequence = [
-    {cmd = "poetry run uvicorn downtube.main:app --reload"}
+    {cmd = "poetry run uvicorn downtube:app --reload"}
 ]
