@@ -20,6 +20,8 @@
                         `;
                     } else if (data.status === 'downloading') {
                         setTimeout(checkStatus, 3000); // Check again after 3 seconds
+                    } else if (data.status === 'too-large') {
+                        document.getElementById('status-message').innerText = 'The video is too large to download.';
                     } else {
                         document.getElementById('status-message').innerText = 'An error occurred during download.';
                     }
