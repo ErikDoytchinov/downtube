@@ -21,8 +21,8 @@ logger.addHandler(handler)
 
 templates = Jinja2Templates(directory="downtube/templates")
 downloads = {}
-MAX_VIDEO_DURATION = 600
-CLEANUP_INTERVAL = 350
+MAX_VIDEO_DURATION = 3600  # 1 hour
+CLEANUP_INTERVAL = 350  # 5 minutes
 
 
 async def on_startup(app: FastAPI):
