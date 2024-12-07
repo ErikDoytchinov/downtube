@@ -43,7 +43,7 @@ async def on_startup(app: FastAPI):
 
 
 app = FastAPI(lifespan=on_startup)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="downtube/static"), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -53,7 +53,7 @@ async def read_root(request: Request):
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
-    return StaticFiles(directory="static").file_response("favicon.ico")
+    return FileResponse("downtube/static/favicon.ico")
 
 
 @app.post("/download", response_class=HTMLResponse)
