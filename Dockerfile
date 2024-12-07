@@ -11,9 +11,11 @@ ENV POETRY_VERSION=1.5.1
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential
+# Install system dependencies including ffmpeg
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Poetry
 RUN pip install "poetry==$POETRY_VERSION"
@@ -21,9 +23,8 @@ RUN pip install "poetry==$POETRY_VERSION"
 # Copy only the dependency files to leverage Docker cache
 COPY pyproject.toml poetry.lock /app/
 
-# Install dependencies
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-dev --no-interaction --no-ansi
+# Install dependencies without dev packages
+RUN poetry config virtualenvs.create false && poetry install --no-dev --no-interaction --no-ansi
 
 # Copy the rest of the application code
 COPY . /app

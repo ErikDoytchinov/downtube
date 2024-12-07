@@ -15,8 +15,8 @@
             Download YouTube videos instantly by entering the video link below.
         </p>
         <div class="max-w-md mx-auto bg-white p-8 rounded shadow">
-            <form action="/download" method="post">
-                <label class="block mb-4">
+            <form action="/download" method="post" class="space-y-4">
+                <label class="block">
                     <input
                         type="url"
                         name="video_url"
@@ -25,12 +25,28 @@
                         placeholder="Enter the YouTube video URL"
                     />
                 </label>
-                <button
-                    type="submit"
-                    class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded"
-                >
-                    Download Video
-                </button>
+                
+                <div class="flex space-x-2">
+                    <!-- Button to download video -->
+                    <button
+                        type="submit"
+                        name="download_type"
+                        value="video"
+                        class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded text-center"
+                    >
+                        Download Video
+                    </button>
+                    
+                    <!-- Button to download audio -->
+                    <button
+                        type="submit"
+                        name="download_type"
+                        value="audio"
+                        class="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded text-center"
+                    >
+                        Download Audio
+                    </button>
+                </div>
             </form>
         </div>
     </div>
@@ -38,5 +54,6 @@
         <p>
             Made with ❤️ for <b>Owemor</b> by <a href="https://erik.doytchinov.eu" class="text-blue-500">Erik Doytchinov</a>
         </p>
+    </div>
 </body>
 </html>

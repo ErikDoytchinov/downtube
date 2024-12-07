@@ -57,8 +57,11 @@ async def favicon():
 
 
 @app.post("/download", response_class=HTMLResponse)
-async def download_video(
-    request: Request, background_task: BackgroundTasks, video_url: str = Form(...)
+async def download_content(
+    request: Request,
+    background_task: BackgroundTasks,
+    video_url: str = Form(...),
+    download_type: str = Form(...),
 ):
     try:
         if "youtube.com" not in video_url and "youtu.be" not in video_url:
@@ -69,14 +72,15 @@ async def download_video(
     download_id = str(uuid.uuid4())
     downloads[download_id] = {"status": "downloading", "filename": None}
 
-    background_task.add_task(process_video_download, video_url, download_id)
+    background_task.add_task(process_download, video_url, download_id, download_type)
 
     return templates.TemplateResponse(
         "result.html",
         {
             "request": request,
-            "message": "Video download initiated",
+            "message": "Your download is being prepared...",
             "download_id": download_id,
+            "download_type": download_type,  # pass "video" or "audio" here
         },
     )
 
@@ -84,21 +88,26 @@ async def download_video(
 @app.get("/download_video/{download_id}", response_class=FileResponse)
 async def download_video_file(download_id: str, background_task: BackgroundTasks):
     if download_id not in downloads or downloads[download_id]["status"] != "completed":
-        raise HTTPException(status_code=404, detail="Video not ready")
+        raise HTTPException(status_code=404, detail="Content not ready")
 
-    video_path = downloads[download_id]["filename"]
-    if not os.path.isfile(video_path):
-        raise HTTPException(status_code=404, detail="Video not found")
+    file_path = downloads[download_id]["filename"]
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
 
-    video_name = os.path.basename(video_path)
+    file_name = os.path.basename(file_path)
 
     # Schedule the file removal after the response is sent
-    background_task.add_task(remove_file, video_path, download_id)
+    background_task.add_task(remove_file, file_path, download_id)
 
-    return FileResponse(path=video_path, media_type="video/mp4", filename=video_name)
+    # Determine media_type based on extension
+    media_type = (
+        "video/mp4"
+        if file_path.lower().endswith((".mp4", ".mkv", ".webm"))
+        else "audio/mpeg"
+    )
+    return FileResponse(path=file_path, media_type=media_type, filename=file_name)
 
 
-# version check
 @app.get("/version")
 async def version():
     return {"version": "1.0.0"}
@@ -111,58 +120,61 @@ async def check_status(download_id: str):
     return downloads[download_id]
 
 
-def fetch_video_path(video_url: str):
-    """
-    Fetch the file path for a video from its URL without downloading it.
-    """
+def process_download(video_url: str, download_id: str, download_type: str):
+    print(f"Downloading {download_type} from {video_url}")
 
-    ydl_opts = {
-        "cookiefile": "www.youtube.com_cookies.txt",
-        "format": "best",
-        "outtmpl": "downloads/%(title)s.%(ext)s",
-    }
-    with YoutubeDL(ydl_opts) as ydl:
-        yt = ydl.extract_info(video_url, download=False)
-
-    return ydl.prepare_filename(yt)
-
-
-def process_video_download(video_url: str, download_id: str):
-    print(f"Downloading video from {video_url}")
-
-    # check if video is too big
-    ydl_opts = {
+    # Common YDL options
+    base_ydl_opts = {
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            + "AppleWebKit/537.36 (KHTML, like Gecko) "
-            + "Chrome/58.0.3029.110 Safari/537.3"
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/58.0.3029.110 Safari/537.3"
+            )
         },
         "cookiefile": "www.youtube.com_cookies.txt",
-        "format": "best",
         "outtmpl": "downloads/%(title)s.%(ext)s",
     }
+
+    # Adjust format depending on download_type
+    if download_type == "audio":
+        ydl_opts = {
+            **base_ydl_opts,
+            "format": "bestaudio/best",
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ],
+        }
+    else:
+        # default to video
+        ydl_opts = {**base_ydl_opts, "format": "best"}
+
+    # First check duration
     with YoutubeDL(ydl_opts) as ydl:
         yt = ydl.extract_info(video_url, download=False)
         if yt["duration"] > MAX_VIDEO_DURATION:
             downloads[download_id]["status"] = "too-large"
             return
 
+    # Now actually download
     with YoutubeDL(ydl_opts) as ydl:
         yt = ydl.extract_info(video_url, download=True)
-        video_filename = ydl.prepare_filename(yt)
+        file_filename = ydl.prepare_filename(yt)
+        # sometimes when downloading a audio file, the filename is not the same as the output, the end is .webm not .mp3
+        if download_type == "audio":
+            file_filename = file_filename.replace(".webm", ".mp3")
 
     downloads[download_id]["status"] = "completed"
-    downloads[download_id]["filename"] = video_filename
+    downloads[download_id]["filename"] = file_filename
 
-    print(f"Video has been downloaded: {yt['title']} ({yt['duration']}) seconds")
+    print(f"Downloaded: {yt['title']} ({yt['duration']} seconds) as {download_type}")
 
 
 async def cleanup_undownload_videos():
-    """
-    Removes videos that have ran out of time to download.
-    This function will be called periodically. Removing videos
-    that have been in the "completed" state for too long.
-    """
     while True:
         try:
             for download_id, download_info in list(downloads.items()):
@@ -184,5 +196,4 @@ def remove_file(path: str, download_id: str):
         downloads[download_id]["status"] = "deleted"
         downloads.pop(download_id)
     except Exception as e:
-        # Optionally log the error
         print(f"Error deleting file {path}: {e}")

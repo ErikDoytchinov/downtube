@@ -2,34 +2,50 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Downtube - Download Your Video</title>
+    <title>Downtube - Download Your File</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Include Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="icon" type="image/x-icon" href="../static/favicon.ico">
     <script>
+        var downloadId = "{{ download_id }}";
+        var downloadType = "{{ download_type }}"; // "video" or "audio"
+
         function checkStatus() {
-            fetch('/status/{{ download_id }}')
-                .then(response => response.json())
+            fetch('/status/' + downloadId)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'completed') {
-                        document.getElementById('status-message').innerText = 'Your video is ready for download.';
+                        document.getElementById('status-message').innerText = 'Your file is ready for download.';
+                        
+                        // Determine button text based on download type
+                        var btnText = 'Download ' + (downloadType === 'audio' ? 'Audio' : 'Video');
+                        
                         document.getElementById('download-link').innerHTML = `
-                            <a href="/download_video/{{ download_id }}" class="block text-center bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded">
-                                Download Video
+                            <a href="/download_video/${downloadId}" class="block text-center bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded">
+                                ${btnText}
                             </a>
                         `;
                     } else if (data.status === 'downloading') {
-                        setTimeout(checkStatus, 3000); // Check again after 3 seconds
+                        // Still downloading, check again after 3 seconds
+                        setTimeout(checkStatus, 3000);
                     } else if (data.status === 'too-large') {
-                        document.getElementById('status-message').innerText = 'The video is too large to download.';
+                        document.getElementById('status-message').innerText = 'The file is too large to download.';
+                    } else if (data.status === 'deleted') {
+                        document.getElementById('status-message').innerText = 'This download has expired.';
                     } else {
-                        document.getElementById('status-message').innerText = 'An error occurred during download.';
+                        document.getElementById('status-message').innerText = 'An error occurred during the download.';
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    setTimeout(checkStatus, 5000); // Retry after 5 seconds on error
+                    // Retry after 5 seconds on error
+                    setTimeout(checkStatus, 5000);
                 });
         }
 
@@ -47,7 +63,7 @@
             </p>
             <div id="download-link"></div>
             <a href="/" class="block text-center bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded mt-4">
-                Download Another Video
+                Download Another
             </a>
         </div>
     </div>
