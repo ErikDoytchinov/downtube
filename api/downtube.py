@@ -1,9 +1,14 @@
+import json
 import os
 import uuid
-from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    StreamingResponse,
+)
+from pydantic import BaseModel
 from yt_dlp import YoutubeDL
 from pathlib import Path
 import asyncio
@@ -19,7 +24,6 @@ handler.setFormatter(
 logger = logging.getLogger(__name__)
 logger.addHandler(handler)
 
-templates = Jinja2Templates(directory="downtube/templates")
 downloads = {}
 MAX_VIDEO_DURATION = 3600  # 1 hour
 CLEANUP_INTERVAL = 350  # 5 minutes
@@ -39,34 +43,36 @@ async def on_startup(app: FastAPI):
     try:
         await cleanup_task
     except asyncio.CancelledError:
-        print("Cleanup task successfully cancelled during shutdown.")
+        logger.info("Cleanup task successfully cancelled during shutdown.")
 
 
 app = FastAPI(lifespan=on_startup)
-app.mount("/static", StaticFiles(directory="downtube/static"), name="static")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://downtube.doytchinov.eu"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    logger.info("Root page accessed")
+    return "Hello, World!"
 
 
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    return FileResponse("downtube/static/favicon.ico")
+class DownloadRequest(BaseModel):
+    video_url: str
+    download_type: str
 
 
-@app.post("/download", response_class=HTMLResponse)
-async def download_content(
-    request: Request,
-    background_task: BackgroundTasks,
-    video_url: str = Form(...),
-    download_type: str = Form(...),
-):
-    try:
-        if "youtube.com" not in video_url and "youtu.be" not in video_url:
-            raise ValueError
-    except ValueError:
+@app.post("/download")
+async def download_content(request: DownloadRequest, background_task: BackgroundTasks):
+    video_url = request.video_url
+    download_type = request.download_type
+
+    if "youtube.com" not in video_url and "youtu.be" not in video_url:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
     download_id = str(uuid.uuid4())
@@ -74,15 +80,11 @@ async def download_content(
 
     background_task.add_task(process_download, video_url, download_id, download_type)
 
-    return templates.TemplateResponse(
-        "result.html",
-        {
-            "request": request,
-            "message": "Your download is being prepared...",
-            "download_id": download_id,
-            "download_type": download_type,  # pass "video" or "audio" here
-        },
-    )
+    return {
+        "download_id": download_id,
+        "download_type": download_type,
+        "status": "downloading",
+    }
 
 
 @app.get("/download_video/{download_id}", response_class=FileResponse)
@@ -94,12 +96,9 @@ async def download_video_file(download_id: str, background_task: BackgroundTasks
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="File not found")
 
-    file_name = os.path.basename(file_path)
-
-    # Schedule the file removal after the response is sent
     background_task.add_task(remove_file, file_path, download_id)
 
-    # Determine media_type based on extension
+    file_name = os.path.basename(file_path)
     media_type = (
         "video/mp4"
         if file_path.lower().endswith((".mp4", ".mkv", ".webm"))
@@ -114,10 +113,17 @@ async def version():
 
 
 @app.get("/status/{download_id}")
-async def check_status(download_id: str):
-    if download_id not in downloads:
-        raise HTTPException(status_code=404, detail="Download not found")
-    return downloads[download_id]
+async def sse_status(download_id: str):
+    async def event_stream():
+        while True:
+            if download_id in downloads:
+                yield f"data: {json.dumps(downloads[download_id])}\n\n"
+            else:
+                yield 'data: {"status": "not found"}\n\n'
+                break
+            await asyncio.sleep(1)  # Adjust interval as needed
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 def process_download(video_url: str, download_id: str, download_type: str):
@@ -153,25 +159,28 @@ def process_download(video_url: str, download_id: str, download_type: str):
         # default to video
         ydl_opts = {**base_ydl_opts, "format": "best"}
 
-    # First check duration
-    with YoutubeDL(ydl_opts) as ydl:
-        yt = ydl.extract_info(video_url, download=False)
-        if yt["duration"] > MAX_VIDEO_DURATION:
-            downloads[download_id]["status"] = "too-large"
-            return
+    try:
+        # Check video duration first
+        with YoutubeDL(ydl_opts) as ydl:
+            yt = ydl.extract_info(video_url, download=False)
+            if yt["duration"] > MAX_VIDEO_DURATION:
+                downloads[download_id]["status"] = "too-large"
+                return
 
-    # Now actually download
-    with YoutubeDL(ydl_opts) as ydl:
-        yt = ydl.extract_info(video_url, download=True)
-        file_filename = ydl.prepare_filename(yt)
-        # sometimes when downloading a audio file, the filename is not the same as the output, the end is .webm not .mp3
-        if download_type == "audio":
-            file_filename = file_filename.replace(".webm", ".mp3")
+        # Download video/audio
+        with YoutubeDL(ydl_opts) as ydl:
+            yt = ydl.extract_info(video_url, download=True)
+            file_filename = ydl.prepare_filename(yt)
 
-    downloads[download_id]["status"] = "completed"
-    downloads[download_id]["filename"] = file_filename
+            if download_type == "audio":
+                file_filename = file_filename.replace(".webm", ".mp3")
 
-    print(f"Downloaded: {yt['title']} ({yt['duration']} seconds) as {download_type}")
+            downloads[download_id]["status"] = "completed"
+            downloads[download_id]["filename"] = file_filename
+            print(f"Downloaded: {yt['title']} as {download_type}")
+    except Exception as e:
+        print(f"Download failed: {e}")
+        downloads[download_id]["status"] = "error"
 
 
 async def cleanup_undownload_videos():
