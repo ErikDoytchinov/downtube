@@ -1,13 +1,9 @@
 import json
 import os
 import uuid
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi import FastAPI, APIRouter, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import (
-    FileResponse,
-    HTMLResponse,
-    StreamingResponse,
-)
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
 from pathlib import Path
@@ -26,10 +22,14 @@ logger.addHandler(handler)
 
 downloads = {}
 MAX_VIDEO_DURATION = 3600  # 1 hour
-CLEANUP_INTERVAL = 350  # 5 minutes
+CLEANUP_INTERVAL = 350  # ~5 minutes
 
 
+# ------------------------
+# FastAPI lifespan function
+# ------------------------
 async def on_startup(app: FastAPI):
+    # Create downloads dir if not present and clean old files at startup
     Path("downloads").mkdir(exist_ok=True)
     for file in os.listdir("downloads"):
         os.remove(f"downloads/{file}")
@@ -37,8 +37,10 @@ async def on_startup(app: FastAPI):
     cleanup_task = asyncio.create_task(cleanup_undownload_videos())
     app.state.cleanup_task = cleanup_task
 
+    # Startup context manager yields here
     yield
 
+    # Shutdown logic
     cleanup_task.cancel()
     try:
         await cleanup_task
@@ -46,8 +48,14 @@ async def on_startup(app: FastAPI):
         logger.info("Cleanup task successfully cancelled during shutdown.")
 
 
+# ------------------------
+# Create FastAPI app
+# ------------------------
 app = FastAPI(lifespan=on_startup)
 
+# ------------------------
+# CORS settings
+# ------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://downtube.doytchinov.eu"],
@@ -55,8 +63,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ------------------------
+# Create a router with /api prefix
+# ------------------------
+api_router = APIRouter(prefix="/api")
 
-@app.get("/", response_class=HTMLResponse)
+
+@api_router.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     logger.info("Root page accessed")
     return "Hello, World!"
@@ -67,7 +80,7 @@ class DownloadRequest(BaseModel):
     download_type: str
 
 
-@app.post("/download")
+@api_router.post("/download")
 async def download_content(request: DownloadRequest, background_task: BackgroundTasks):
     video_url = request.video_url
     download_type = request.download_type
@@ -87,7 +100,7 @@ async def download_content(request: DownloadRequest, background_task: Background
     }
 
 
-@app.get("/download_video/{download_id}", response_class=FileResponse)
+@api_router.get("/download_video/{download_id}", response_class=FileResponse)
 async def download_video_file(download_id: str, background_task: BackgroundTasks):
     if download_id not in downloads or downloads[download_id]["status"] != "completed":
         raise HTTPException(status_code=404, detail="Content not ready")
@@ -96,6 +109,7 @@ async def download_video_file(download_id: str, background_task: BackgroundTasks
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="File not found")
 
+    # Schedule removal of the file after it's downloaded
     background_task.add_task(remove_file, file_path, download_id)
 
     file_name = os.path.basename(file_path)
@@ -107,12 +121,12 @@ async def download_video_file(download_id: str, background_task: BackgroundTasks
     return FileResponse(path=file_path, media_type=media_type, filename=file_name)
 
 
-@app.get("/version")
+@api_router.get("/version")
 async def version():
     return {"version": "1.0.0"}
 
 
-@app.get("/status/{download_id}")
+@api_router.get("/status/{download_id}")
 async def sse_status(download_id: str):
     async def event_stream():
         while True:
@@ -126,10 +140,18 @@ async def sse_status(download_id: str):
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+# ------------------------
+# Register the router
+# ------------------------
+app.include_router(api_router)
+
+
+# ------------------------
+# Utility / Download logic
+# ------------------------
 def process_download(video_url: str, download_id: str, download_type: str):
     print(f"Downloading {download_type} from {video_url}")
 
-    # Common YDL options
     base_ydl_opts = {
         "headers": {
             "User-Agent": (

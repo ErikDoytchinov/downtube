@@ -6,7 +6,7 @@
         "Name": "downtube-instance",
         "Port": 80,
         "Protocol": "HTTP",
-        "VpcId": "vpc-03979554d76115877",
+        "VpcId": "vpc-034073071260c5e69",
         "TargetType": "instance",
         "HealthCheckPath": "/",
         "HealthCheckProtocol": "HTTP"
@@ -16,7 +16,7 @@
       "Type": "AWS::EC2::SecurityGroup",
       "Properties": {
         "GroupDescription": "Security group for my instances",
-        "VpcId": "vpc-03979554d76115877",
+        "VpcId": "vpc-034073071260c5e69",
         "SecurityGroupIngress": [
           {
             "IpProtocol": "tcp",
@@ -59,8 +59,8 @@
       "Properties": {
         "AutoScalingGroupName": "awseb-e-DrrGlUL3Ws1pHTz8JpQt",
         "VPCZoneIdentifier": [
-          "subnet-0dfa1750d2987f16a",
-          "subnet-010e2201c23ca1ed3"
+          "subnet-0e039c2e8deef4c7e",
+          "subnet-0f9fa5798d61b7c5e"
         ],
         "LaunchTemplate": {
           "LaunchTemplateId": {
