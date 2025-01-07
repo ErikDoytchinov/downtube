@@ -123,7 +123,7 @@ async def download_video_file(download_id: str, background_task: BackgroundTasks
 
 @api_router.get("/version")
 async def version():
-    return {"version": "1.0.0"}
+    return {"version": "1.0.1"}
 
 
 @api_router.get("/status/{download_id}")

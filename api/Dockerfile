@@ -29,8 +29,6 @@ RUN poetry config virtualenvs.create false && poetry install --no-dev --no-inter
 # Copy the rest of the application code
 COPY . /app
 
-# Expose the port FastAPI will run on
-EXPOSE 8000
+EXPOSE 80
 
-# Command to run the application
-CMD ["poetry", "run", "uvicorn", "downtube:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["poetry", "run", "uvicorn", "downtube:app", "--host", "0.0.0.0", "--port", "80"]
