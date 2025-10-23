@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  downtube-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: downtube-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - PORT=8000
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Persist downloads directory
+      - ./downloads:/app/downloads
+      # Mount cookies file if needed
+      - ./www.youtube.com_cookies.txt:/app/www.youtube.com_cookies.txt:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - downtube-network
+
+networks:
+  downtube-network:
+    driver: bridge
